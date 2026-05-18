@@ -78,24 +78,7 @@ class MailSettingController extends Controller
             'test_email' => 'required|email',
         ]);
 
-        $settings = MailSetting::current();
-
-        if ($settings->enabled) {
-            config([
-                'mail.default' => $settings->mailer ?: 'smtp',
-                'mail.mailers.smtp.host' => $settings->host,
-                'mail.mailers.smtp.port' => $settings->port,
-                'mail.mailers.smtp.encryption' => $settings->encryption,
-                'mail.mailers.smtp.auth_mode' => $settings->auth_mode,
-                'mail.mailers.smtp.username' => $settings->username,
-                'mail.mailers.smtp.password' => $settings->password,
-                'mail.from.address' => $settings->from_address ?: config('mail.from.address'),
-                'mail.from.name' => $settings->from_name ?: config('mail.from.name'),
-            ]);
-
-            Mail::purge($settings->mailer ?: 'smtp');
-            Mail::purge('smtp');
-        }
+        MailSetting::current()->applyRuntimeConfig();
 
         try {
             Mail::raw(

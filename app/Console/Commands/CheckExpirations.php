@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Mail\ExpiryReminderDigest;
 use App\Models\LicenseContract;
+use App\Models\MailDigestSend;
+use App\Models\MailSetting;
 use App\Models\NotificationSetting;
 use App\Models\Subscription;
 use App\Models\User;
@@ -14,9 +16,9 @@ use Illuminate\Support\Facades\Mail;
 
 class CheckExpirations extends Command
 {
-    protected $signature = 'app:check-expirations';
+    protected $signature = 'app:check-expirations {--force : Re-send digests even if today\'s ledger row already exists}';
 
-    protected $description = 'Mark overdue subscriptions Expired and email staggered renewal-reminder digests for each (module × selected day-mark) bucket. Run once per day from the scheduler — manual re-runs the same day will re-send the same digests.';
+    protected $description = 'Mark overdue subscriptions Expired and email staggered renewal-reminder digests for each (module × selected day-mark) bucket. Idempotent within a single day — a successful send writes a mail_digest_sends row that blocks re-sends; pass --force to override.';
 
     /** Modules eligible for staggered reminders. */
     private const MODULES = [
@@ -33,6 +35,11 @@ class CheckExpirations extends Command
     public function handle(): int
     {
         $today = Carbon::today();
+
+        // Honor DB-stored SMTP credentials when the admin enabled them on the
+        // Mail Settings page. Without this, scheduled digests would silently
+        // send via the .env mailer config regardless of UI choice.
+        MailSetting::current()->applyRuntimeConfig();
 
         $this->markOverdueSubscriptions($today);
 
@@ -86,8 +93,21 @@ class CheckExpirations extends Command
 
         $cfg = self::MODULES[$moduleKey];
         $batches = 0;
+        $force = (bool) $this->option('force');
 
         foreach ($days as $d) {
+            // Idempotency guard — skip a (module, day_mark, today) that already
+            // succeeded. Manual re-runs can bypass with --force.
+            if (! $force && MailDigestSend::query()
+                ->where('module', $moduleKey)
+                ->where('day_mark', $d)
+                ->where('sent_on', $today->toDateString())
+                ->exists()
+            ) {
+                $this->info("[{$moduleKey}] {$d}-day digest already sent today — skipped (use --force to resend).");
+                continue;
+            }
+
             $target = $today->copy()->addDays($d);
             $rows = $this->baseQuery($moduleKey)
                 ->whereDate('expire_date', $target)
@@ -116,6 +136,23 @@ class CheckExpirations extends Command
                     daysAhead:   $d,
                     records:     $rows,
                 ));
+
+                // Record the successful send so a later run (manual or scheduler
+                // re-trigger) on the same day doesn't double-send. updateOrCreate
+                // because --force can re-send and we want the latest counts.
+                MailDigestSend::updateOrCreate(
+                    [
+                        'module'   => $moduleKey,
+                        'day_mark' => $d,
+                        'sent_on'  => $today->toDateString(),
+                    ],
+                    [
+                        'records_count'    => $rows->count(),
+                        'recipients_count' => count($recipients),
+                        'sent_at'          => now(),
+                    ],
+                );
+
                 $batches++;
                 $this->info("[{$moduleKey}] sent {$d}-day digest with {$rows->count()} record(s) to " . count($recipients) . ' recipient(s).');
             } catch (\Throwable $e) {

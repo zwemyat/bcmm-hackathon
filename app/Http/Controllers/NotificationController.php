@@ -6,6 +6,7 @@ use App\Models\LicenseContract;
 use App\Models\NotificationRead;
 use App\Models\NotificationSetting;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Support\ExpiryNotificationCounter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -34,8 +35,8 @@ class NotificationController extends Controller
         // Load this user's reads keyed by module + id for O(1) lookup.
         $userReads = $this->loadUserReads($user);
 
-        $subs = $this->subscriptionItems($today, $userReads);
-        $lcs = $this->licenseContractItems($today, $userReads);
+        $subs = $this->subscriptionItems($today, $userReads, $user);
+        $lcs = $this->licenseContractItems($today, $userReads, $user);
 
         // Summary for the badge/per-user (subtract read items).
         $summary = ExpiryNotificationCounter::summary($user);
@@ -74,6 +75,11 @@ class NotificationController extends Controller
     public function markRead(Request $request, string $module, int $id)
     {
         $user = $request->user();
+
+        if (! $user || ! $user->canAccess($module, 'view')) {
+            abort(403);
+        }
+
         $today = Carbon::today();
 
         $record = $module === 'subscriptions'
@@ -102,8 +108,8 @@ class NotificationController extends Controller
 
         // Mark every currently-listed item (across modules) as read at its current signature.
         $userReads = $this->loadUserReads($user);
-        $subs = $this->subscriptionItems($today, $userReads);
-        $lcs  = $this->licenseContractItems($today, $userReads);
+        $subs = $this->subscriptionItems($today, $userReads, $user);
+        $lcs  = $this->licenseContractItems($today, $userReads, $user);
 
         $count = 0;
         foreach ($subs->concat($lcs) as $item) {
@@ -140,14 +146,20 @@ class NotificationController extends Controller
         return $out;
     }
 
-    private function subscriptionItems(Carbon $today, array $userReads): Collection
+    private function subscriptionItems(Carbon $today, array $userReads, ?User $user): Collection
     {
+        if ($user && ! $user->canAccess('subscriptions', 'view')) {
+            return collect();
+        }
+
         $setting = NotificationSetting::query()->where('module', 'subscriptions')->first();
         if (! $setting || ! $setting->enabled) {
             return collect();
         }
 
         $threshold = $today->copy()->addDays(max(1, $setting->windowDays()));
+        // View-only users would 403 on .edit; send them to the list page instead.
+        $canEdit = $user && $user->canAccess('subscriptions', 'edit');
 
         return Subscription::query()
             ->where('status', 'Active')
@@ -155,7 +167,7 @@ class NotificationController extends Controller
             ->whereDate('expire_date', '<=', $threshold)
             ->orderBy('expire_date')
             ->get()
-            ->map(function (Subscription $s) use ($today, $userReads) {
+            ->map(function (Subscription $s) use ($today, $userReads, $canEdit) {
                 $days = (int) $today->diffInDays($s->expire_date, false);
                 $sig  = NotificationRead::signature($s->expire_date, $days);
                 $stored = $userReads['subscriptions'][$s->id] ?? null;
@@ -170,28 +182,34 @@ class NotificationController extends Controller
                     'days_remaining' => $days,
                     'signature'      => $sig,
                     'is_read'        => $stored === $sig,
-                    'link_route'     => 'subscriptions.edit',
-                    'link_param'     => $s,
-                    'link_label'     => 'View subscription',
+                    'link_route'     => $canEdit ? 'subscriptions.edit' : 'subscriptions.index',
+                    'link_param'     => $canEdit ? $s : [],
+                    'link_label'     => $canEdit ? 'View subscription' : 'Open subscriptions list',
                 ];
             });
     }
 
-    private function licenseContractItems(Carbon $today, array $userReads): Collection
+    private function licenseContractItems(Carbon $today, array $userReads, ?User $user): Collection
     {
+        if ($user && ! $user->canAccess('licenses_contracts', 'view')) {
+            return collect();
+        }
+
         $setting = NotificationSetting::query()->where('module', 'licenses_contracts')->first();
         if (! $setting || ! $setting->enabled) {
             return collect();
         }
 
         $threshold = $today->copy()->addDays(max(1, $setting->windowDays()));
+        // View-only users would 403 on .edit; send them to the list page instead.
+        $canEdit = $user && $user->canAccess('licenses_contracts', 'edit');
 
         return LicenseContract::query()
             ->whereNotIn('status', ['Terminated'])
             ->whereDate('expire_date', '<=', $threshold)
             ->orderBy('expire_date')
             ->get()
-            ->map(function (LicenseContract $lc) use ($today, $userReads) {
+            ->map(function (LicenseContract $lc) use ($today, $userReads, $canEdit) {
                 $days = (int) $today->diffInDays($lc->expire_date, false);
                 $sig  = NotificationRead::signature($lc->expire_date, $days);
                 $stored = $userReads['licenses_contracts'][$lc->id] ?? null;
@@ -207,9 +225,9 @@ class NotificationController extends Controller
                     'days_remaining' => $days,
                     'signature'      => $sig,
                     'is_read'        => $stored === $sig,
-                    'link_route'     => 'licenses-contracts.edit',
-                    'link_param'     => $lc,
-                    'link_label'     => 'View license / contract',
+                    'link_route'     => $canEdit ? 'licenses-contracts.edit' : 'licenses-contracts.index',
+                    'link_param'     => $canEdit ? $lc : [],
+                    'link_label'     => $canEdit ? 'View license / contract' : 'Open licenses list',
                 ];
             });
     }

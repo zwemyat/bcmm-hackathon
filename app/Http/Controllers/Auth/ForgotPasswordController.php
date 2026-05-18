@@ -17,10 +17,11 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 class ForgotPasswordController extends Controller
 {
     /**
-     * Generic message shown when an email belongs to a non-admin OR doesn't
-     * exist at all. Same wording either way so we don't leak account existence.
+     * Generic error shown on any failed reset attempt. Same wording for invalid
+     * token, expired token, non-admin user, or unknown email — so the page can't
+     * be used to enumerate which addresses are admin accounts.
      */
-    private const CONTACT_ADMIN_MESSAGE = 'Only admin accounts can reset their password by email. Please contact your system administrator to reset your password.';
+    private const GENERIC_RESET_ERROR = 'This reset link is invalid or has expired. Please request a new one.';
 
     public function showLinkRequestForm()
     {
@@ -53,6 +54,10 @@ class ForgotPasswordController extends Controller
 
         $user = User::query()->where('email', $data['email'])->first();
 
+        // Two server-side paths (admin sends, non-admin denies) — but the
+        // user-facing flash is identical so the page can't be probed for
+        // "is this email an admin account?" enumeration. Differentiation
+        // stays in the activity log for ops review.
         if (! $user || ! $user->isAdmin()) {
             ActivityLogger::log(
                 action: 'password_reset_denied',
@@ -64,12 +69,9 @@ class ForgotPasswordController extends Controller
                 ],
             );
 
-            return back()
-                ->with('contact_admin', self::CONTACT_ADMIN_MESSAGE)
-                ->with('requested_email', $data['email']);
+            return back()->with('submitted_email', $data['email']);
         }
 
-        // Admin: generate a token via Laravel's broker and send our styled email.
         $token = Password::broker()->createToken($user);
         $expireMinutes = (int) config('auth.passwords.users.expire', 60);
         $resetUrl = route('password.reset', ['token' => $token, 'email' => $user->email]);
@@ -86,21 +88,19 @@ class ForgotPasswordController extends Controller
                 description: "Sent password reset link to admin {$user->email}",
                 subject: $user,
             );
-
-            return back()
-                ->with('reset_sent_to', $user->email)
-                ->with('reset_expire_minutes', $expireMinutes);
         } catch (\Throwable $e) {
+            // Log the failure server-side, but do NOT surface "couldn't send to
+            // <email>" to the user — that confirms the email is an admin. Show
+            // the same generic submitted-state page either way; admins watching
+            // the log will catch send failures.
             Log::warning('Failed to send password reset email', [
                 'user_id' => $user->id,
-                'email' => $user->email,
-                'error' => $e->getMessage(),
+                'email'   => $user->email,
+                'error'   => $e->getMessage(),
             ]);
-
-            return back()
-                ->withInput()
-                ->withErrors(['email' => 'Could not send reset email: ' . $e->getMessage()]);
         }
+
+        return back()->with('submitted_email', $data['email']);
     }
 
     public function showResetForm(Request $request, string $token)
@@ -119,12 +119,15 @@ class ForgotPasswordController extends Controller
             'password' => ['required', 'confirmed', PasswordRule::min(6)],
         ]);
 
-        // Hard guard: even if the token is valid, only allow admins to use it.
+        // Hard guard: even with a valid token, only admins are allowed to use
+        // this endpoint. The error message intentionally mirrors the "bad
+        // token" branch below so a non-admin attacker holding a stolen token
+        // can't distinguish "wrong token" from "wrong account type".
         $user = User::query()->where('email', $data['email'])->first();
         if (! $user || ! $user->isAdmin()) {
             return back()
                 ->withInput($request->only('email'))
-                ->withErrors(['email' => self::CONTACT_ADMIN_MESSAGE]);
+                ->withErrors(['email' => self::GENERIC_RESET_ERROR]);
         }
 
         $status = Password::broker()->reset(
@@ -147,8 +150,10 @@ class ForgotPasswordController extends Controller
             return redirect()->route('login')->with('success', 'Password reset. You can sign in with your new password.');
         }
 
+        // Same generic error for invalid token / expired token / mismatched
+        // user, so the page can't be used to enumerate token validity.
         return back()
             ->withInput($request->only('email'))
-            ->withErrors(['email' => trans($status)]);
+            ->withErrors(['email' => self::GENERIC_RESET_ERROR]);
     }
 }

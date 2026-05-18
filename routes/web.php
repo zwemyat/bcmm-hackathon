@@ -17,12 +17,19 @@ Route::get('/', fn () => redirect('/dashboard'));
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [LoginController::class, 'login']);
+    // C4: cap brute-force attempts. 10/min per IP is generous for legit typos
+    // while making credential stuffing impractical.
+    Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
 
     Route::get('/forgot-password', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request');
-    Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+    // Each POST fires an outbound email — tighter limit prevents mail abuse.
+    Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])
+        ->middleware('throttle:5,1')
+        ->name('password.email');
     Route::get('/reset-password/{token}', [ForgotPasswordController::class, 'showResetForm'])->name('password.reset');
-    Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name('password.update');
+    Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])
+        ->middleware('throttle:10,1')
+        ->name('password.update');
 });
 
 Route::middleware('auth')->group(function () {
@@ -31,15 +38,22 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // PC Master
+    //
+    // The show route uses {pc_asset}, which is greedy — without the numeric
+    // constraint it swallows /pc-assets/create (because the view group is
+    // registered before the edit group that owns the create route) and route
+    // model binding 404s on "create".
     Route::middleware('module:pc_assets,view')->group(function () {
         Route::get('pc-assets/export', [PcAssetController::class, 'export'])->name('pc-assets.export');
         Route::get('pc-assets/template', [PcAssetController::class, 'template'])->name('pc-assets.template');
-        Route::resource('pc-assets', PcAssetController::class)->only(['index', 'show']);
+        Route::resource('pc-assets', PcAssetController::class)->only(['index', 'show'])
+            ->where(['pc_asset' => '[0-9]+']);
     });
     Route::middleware('module:pc_assets,edit')->group(function () {
         Route::post('pc-assets/import', [PcAssetController::class, 'import'])->name('pc-assets.import');
         Route::delete('pc-assets/bulk', [PcAssetController::class, 'bulkDestroy'])->name('pc-assets.bulk-destroy');
-        Route::resource('pc-assets', PcAssetController::class)->except(['index', 'show']);
+        Route::resource('pc-assets', PcAssetController::class)->except(['index', 'show'])
+            ->where(['pc_asset' => '[0-9]+']);
     });
 
     // Subscriptions
@@ -71,16 +85,18 @@ Route::middleware('auth')->group(function () {
             ->except(['index', 'show']);
     });
 
-    // Devices
+    // Devices — same {device} shadowing risk as PC Master above.
     Route::middleware('module:devices,view')->group(function () {
         Route::get('devices/export', [DeviceController::class, 'export'])->name('devices.export');
         Route::get('devices/template', [DeviceController::class, 'template'])->name('devices.template');
-        Route::resource('devices', DeviceController::class)->only(['index', 'show']);
+        Route::resource('devices', DeviceController::class)->only(['index', 'show'])
+            ->where(['device' => '[0-9]+']);
     });
     Route::middleware('module:devices,edit')->group(function () {
         Route::post('devices/import', [DeviceController::class, 'import'])->name('devices.import');
         Route::delete('devices/bulk', [DeviceController::class, 'bulkDestroy'])->name('devices.bulk-destroy');
-        Route::resource('devices', DeviceController::class)->except(['index', 'show']);
+        Route::resource('devices', DeviceController::class)->except(['index', 'show'])
+            ->where(['device' => '[0-9]+']);
     });
 
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
@@ -98,7 +114,12 @@ Route::middleware('auth')->group(function () {
 
         Route::get('mail-settings', [\App\Http\Controllers\MailSettingController::class, 'edit'])->name('mail-settings.edit');
         Route::put('mail-settings', [\App\Http\Controllers\MailSettingController::class, 'update'])->name('mail-settings.update');
-        Route::post('mail-settings/test', [\App\Http\Controllers\MailSettingController::class, 'sendTest'])->name('mail-settings.test');
+        // H4: each test send is an outbound email — throttle even though
+        // the endpoint is admin-gated, so a compromised admin can't fan out
+        // arbitrary mail to external addresses.
+        Route::post('mail-settings/test', [\App\Http\Controllers\MailSettingController::class, 'sendTest'])
+            ->middleware('throttle:5,1')
+            ->name('mail-settings.test');
 
         Route::get('notification-settings', [\App\Http\Controllers\NotificationSettingController::class, 'edit'])->name('notification-settings.edit');
         Route::put('notification-settings/{module}', [\App\Http\Controllers\NotificationSettingController::class, 'update'])->name('notification-settings.update');

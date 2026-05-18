@@ -4,11 +4,11 @@
 
 @section('content')
 @php
-    $sentTo        = session('reset_sent_to');
-    $expireMinutes = (int) session('reset_expire_minutes', 60);
-    $contactAdmin  = session('contact_admin');
-    $deniedEmail   = session('requested_email');
-    $state = $sentTo ? 'sent' : ($contactAdmin ? 'contact' : 'form');
+    // C3: a single 'submitted' state for any successful POST, regardless of
+    // whether the email belongs to an admin. The page renders the same content
+    // either way so it can't be probed for account-existence / role.
+    $submittedEmail = session('submitted_email');
+    $state = $submittedEmail ? 'submitted' : 'form';
 @endphp
 
 <div class="fp-bg">
@@ -20,48 +20,30 @@
     <div class="fp-shell">
         <div class="fp-card fp-card--{{ $state }}">
 
-            @if($state === 'sent')
-                {{-- ============ SUCCESS ============ --}}
+            @if($state === 'submitted')
+                {{-- ============ SUBMITTED (admin or not — same UI) ============ --}}
                 <div class="fp-hero">
                     <div class="fp-hero-icon fp-hero-icon--success">
                         <i class="bi bi-envelope-check-fill"></i>
                     </div>
                 </div>
-                <h1 class="fp-title">Check your inbox</h1>
-                <p class="fp-sub">We've sent a secure link to</p>
+                <h1 class="fp-title">Request received</h1>
+                <p class="fp-sub">
+                    If an admin account is registered with this email, we've sent a secure reset link.
+                </p>
                 <div class="fp-email-chip">
                     <i class="bi bi-envelope"></i>
-                    <span>{{ $sentTo }}</span>
+                    <span>{{ $submittedEmail }}</span>
                 </div>
                 <p class="fp-fineprint">
-                    Link expires in <strong>{{ $expireMinutes }} minutes</strong>.<br>
-                    Didn't get it? <a href="{{ route('password.request') }}">Send again</a>
+                    Don't see it within a few minutes? Standard accounts can't reset by email &mdash;
+                    please contact your administrator.
                 </p>
-                <a href="{{ route('login') }}" class="fp-btn fp-btn--primary">
-                    <i class="bi bi-arrow-left"></i> Back to sign in
-                </a>
-
-            @elseif($state === 'contact')
-                {{-- ============ CONTACT ADMIN ============ --}}
-                <div class="fp-hero">
-                    <div class="fp-hero-icon fp-hero-icon--warning">
-                        <i class="bi bi-person-badge"></i>
-                    </div>
-                </div>
-                <h1 class="fp-title">Your admin can help</h1>
-                <p class="fp-sub">Only admin accounts reset by email. Reach out to your IT administrator.</p>
-
-                @if($deniedEmail)
-                    <div class="fp-email-chip fp-email-chip--muted">
-                        <i class="bi bi-person"></i>
-                        <span>{{ $deniedEmail }}</span>
-                    </div>
-                @endif
 
                 @if(!empty($adminEmails))
                     @php
                         $subject = rawurlencode('Password reset request');
-                        $body    = rawurlencode("Hi,\n\nI need help resetting my password for " . config('app.name', 'ITAMS') . ".\nMy email: " . ($deniedEmail ?? '') . "\n\nThank you.");
+                        $body    = rawurlencode("Hi,\n\nI need help resetting my password for " . config('app.name', 'ITAMS') . ".\nMy email: " . $submittedEmail . "\n\nThank you.");
                         $primary = $adminEmails[0];
                         $cc      = count($adminEmails) > 1 ? implode(',', array_slice($adminEmails, 1)) : null;
                         $mailto  = "mailto:{$primary}?" . ($cc ? "cc=" . rawurlencode($cc) . "&" : '') . "subject={$subject}&body={$body}";
@@ -70,6 +52,7 @@
                         <i class="bi bi-envelope"></i> Email administrator
                     </a>
                 @endif
+
                 <a href="{{ route('login') }}" class="fp-link-back">
                     <i class="bi bi-arrow-left"></i> Back to sign in
                 </a>

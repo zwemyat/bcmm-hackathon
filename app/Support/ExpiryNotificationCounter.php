@@ -47,9 +47,14 @@ class ExpiryNotificationCounter
             $setting = self::setting($module);
             $enabled = $setting && $setting->enabled;
 
-            if (! $enabled) {
+            // Suppress modules the user has no view permission for — otherwise
+            // the bell badge and notifications page leak record counts for
+            // modules they cannot access.
+            $visible = ! $user || $user->canAccess($module, 'view');
+
+            if (! $enabled || ! $visible) {
                 $byModule[$module] = [
-                    'enabled' => false, 'total' => 0, 'overdue' => 0, 'due_soon' => 0, 'upcoming' => 0,
+                    'enabled' => $enabled && $visible, 'total' => 0, 'overdue' => 0, 'due_soon' => 0, 'upcoming' => 0,
                 ];
                 continue;
             }

@@ -1276,27 +1276,61 @@
             themeBtn?.addEventListener('click', toggleTheme);
             quickBtn?.addEventListener('click', toggleTheme);
 
-            // Copy email button(s) in the user dropdown
+            // Copy email button(s) in the user dropdown.
+            // Use a hidden-textarea fallback so it works even when the
+            // Clipboard API is blocked (insecure context, dropdown-focus loss,
+            // permission policy, etc.).
+            function copyText(text) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+                }
+                return fallbackCopy(text);
+            }
+            function fallbackCopy(text) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const ta = document.createElement('textarea');
+                        ta.value = text;
+                        ta.setAttribute('readonly', '');
+                        ta.style.position = 'fixed';
+                        ta.style.left = '-9999px';
+                        ta.style.opacity = '0';
+                        document.body.appendChild(ta);
+                        ta.focus();
+                        ta.select();
+                        const ok = document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        ok ? resolve() : reject(new Error('execCommand returned false'));
+                    } catch (e) { reject(e); }
+                });
+            }
+
             document.querySelectorAll('[data-copy-email]').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
+                btn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     const email = btn.dataset.copyEmail;
-                    try {
-                        await navigator.clipboard.writeText(email);
-                        const icon  = btn.querySelector('.bi');
-                        const label = btn.querySelector('span');
-                        const origIcon = icon.className;
-                        const origText = label.textContent;
-                        icon.className = 'bi bi-check2 text-success';
-                        label.textContent = 'Copied!';
+                    // Capture DOM refs BEFORE async work — Bootstrap may close
+                    // the dropdown / shift focus before the Promise resolves.
+                    const icon  = btn.querySelector('.bi');
+                    const label = btn.querySelector('span');
+                    const origIcon = icon ? icon.className : '';
+                    const origText = label ? label.textContent : '';
+
+                    copyText(email).then(() => {
+                        if (icon)  icon.className = 'bi bi-check2 text-success';
+                        if (label) label.textContent = 'Copied!';
                         setTimeout(() => {
-                            icon.className = origIcon;
-                            label.textContent = origText;
+                            if (icon)  icon.className = origIcon;
+                            if (label) label.textContent = origText;
                         }, 1400);
-                    } catch (err) {
-                        alert('Copy failed — select the email manually.');
-                    }
+                    }).catch((err) => {
+                        console.warn('Copy email failed:', err);
+                        if (label) label.textContent = 'Press Ctrl+C';
+                        setTimeout(() => {
+                            if (label) label.textContent = origText;
+                        }, 1800);
+                    });
                 });
             });
         })();
