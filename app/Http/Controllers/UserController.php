@@ -8,7 +8,9 @@ use App\Support\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password as PasswordBroker;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
@@ -57,10 +59,13 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        // H1: admin no longer enters a password. We auto-generate one that's
+        // never communicated — it lives only as a bcrypt hash in the DB — and
+        // email the new user a one-time setup link instead. The user picks
+        // their actual password through the reset flow.
         $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => ['required', Password::min(6)],
             'role' => 'required|in:admin,user',
             'avatar' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ];
@@ -70,17 +75,25 @@ class UserController extends Controller
 
         $data = $request->validate($rules);
 
-        // Capture the plain-text password before User::create hashes it via the model cast,
-        // so we can include it in the welcome email.
-        $plainPassword = $data['password'];
-
         if ($request->hasFile('avatar')) {
             $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
         }
 
         $this->applyPermissions($request, $data);
 
+        // Random throwaway. The model's 'password' => 'hashed' cast bcrypts it
+        // on save, so nobody (not even the admin who created the account) ever
+        // sees the cleartext.
+        $data['password'] = Str::random(40);
+
         $user = User::create($data);
+
+        // Mint a single-use token via Laravel's password broker. The setup
+        // page is the same UI as the reset page — first-time setup is just a
+        // reset where the placeholder password is unknown.
+        $token         = PasswordBroker::broker()->createToken($user);
+        $expireMinutes = (int) config('auth.passwords.users.expire', 60);
+        $setupUrl      = route('password.reset', ['token' => $token, 'email' => $user->email]);
 
         ActivityLogger::log(
             action: 'created',
@@ -88,11 +101,11 @@ class UserController extends Controller
             subject: $user,
         );
 
-        $emailStatus = $this->sendCredentialsEmail($user, $plainPassword);
+        $emailStatus = $this->sendCredentialsEmail($user, $setupUrl, $expireMinutes);
 
         $flash = $emailStatus === true
-            ? "User created. Login details sent to {$user->email}."
-            : 'User created, but the welcome email could not be sent: ' . $emailStatus;
+            ? "User created. Setup link sent to {$user->email}."
+            : 'User created, but the setup email could not be sent: ' . $emailStatus;
 
         return redirect()->route('users.index')->with($emailStatus === true ? 'success' : 'warning', $flash);
     }
@@ -107,7 +120,7 @@ class UserController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => "required|email|unique:users,email,{$user->id}",
-            'password' => ['nullable', Password::min(6)],
+            'password' => ['nullable', Password::min(8)->mixedCase()->numbers()],
             'role' => 'required|in:admin,user',
             'avatar' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ];
@@ -157,6 +170,13 @@ class UserController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
+        // H3: refuse to delete the last admin — otherwise admin-only pages
+        // (user management, mail settings, activity logs) become unreachable
+        // and the system locks itself out.
+        if ($user->isAdmin() && User::where('role', 'admin')->count() <= 1) {
+            return back()->with('error', 'Cannot delete the last admin account.');
+        }
+
         if ($user->avatar) {
             Storage::disk('public')->delete($user->avatar);
         }
@@ -175,30 +195,32 @@ class UserController extends Controller
     }
 
     /**
-     * Attempt to email login credentials to the newly-created user.
-     * Returns true on success, or the error message string on failure.
+     * Email the new user a one-time setup link instead of a cleartext
+     * password. Returns true on success, or the error message string on
+     * failure.
      */
-    private function sendCredentialsEmail(User $user, string $plainPassword): bool|string
+    private function sendCredentialsEmail(User $user, string $setupUrl, int $expireMinutes): bool|string
     {
         try {
             Mail::to($user->email)->send(new UserCredentialsMail(
                 user: $user,
-                plainPassword: $plainPassword,
+                setupUrl: $setupUrl,
+                expireMinutes: $expireMinutes,
                 loginUrl: route('login'),
             ));
 
             ActivityLogger::log(
                 action: 'mail_sent',
-                description: "Sent welcome email with login details to {$user->email}",
+                description: "Sent account setup link to {$user->email}",
                 subject: $user,
             );
 
             return true;
         } catch (\Throwable $e) {
-            Log::warning('Failed to send user credentials email', [
+            Log::warning('Failed to send user setup email', [
                 'user_id' => $user->id,
-                'email' => $user->email,
-                'error' => $e->getMessage(),
+                'email'   => $user->email,
+                'error'   => $e->getMessage(),
             ]);
 
             return $e->getMessage();

@@ -50,7 +50,7 @@
                 <label class="fp-float fp-float--has-eye">
                     <input type="password" id="password" name="password"
                            placeholder=" "
-                           minlength="6" required autocomplete="new-password">
+                           minlength="8" required autocomplete="new-password">
                     <span class="fp-float-label">New password</span>
                     <i class="bi bi-lock fp-float-icon"></i>
                     <button type="button" class="fp-float-eye" data-target="password" tabindex="-1" aria-label="Show password">
@@ -68,7 +68,7 @@
                 <label class="fp-float fp-float--has-eye mt-3">
                     <input type="password" id="password_confirmation" name="password_confirmation"
                            placeholder=" "
-                           minlength="6" required autocomplete="new-password">
+                           minlength="8" required autocomplete="new-password">
                     <span class="fp-float-label">Confirm new password</span>
                     <i class="bi bi-lock-fill fp-float-icon"></i>
                     <button type="button" class="fp-float-eye" data-target="password_confirmation" tabindex="-1" aria-label="Show password">
@@ -79,8 +79,9 @@
                 <div class="fp-match d-none" id="matchHint"></div>
 
                 <ul class="fp-reqs" id="pwReqs">
-                    <li data-req="length"><i class="bi bi-circle"></i> At least 6 characters</li>
-                    <li data-req="mixed"><i class="bi bi-circle"></i> Mix of letters and numbers</li>
+                    <li data-req="length"><i class="bi bi-circle"></i> At least 8 characters</li>
+                    <li data-req="case"><i class="bi bi-circle"></i> Both upper- and lowercase letters</li>
+                    <li data-req="digit"><i class="bi bi-circle"></i> At least one number</li>
                     <li data-req="match"><i class="bi bi-circle"></i> Both fields match</li>
                 </ul>
 
@@ -186,22 +187,23 @@
             });
         });
 
-        const pw     = document.getElementById('password');
-        const cf     = document.getElementById('password_confirmation');
-        const meter  = document.getElementById('strengthMeter');
-        const label  = meter?.querySelector('.fp-strength-label');
-        const match  = document.getElementById('matchHint');
-        const reqs   = document.getElementById('pwReqs');
-        const reqLen = reqs?.querySelector('[data-req="length"]');
-        const reqMix = reqs?.querySelector('[data-req="mixed"]');
-        const reqMat = reqs?.querySelector('[data-req="match"]');
-        const submit = document.getElementById('resetSubmit');
+        const pw      = document.getElementById('password');
+        const cf      = document.getElementById('password_confirmation');
+        const meter   = document.getElementById('strengthMeter');
+        const label   = meter?.querySelector('.fp-strength-label');
+        const match   = document.getElementById('matchHint');
+        const reqs    = document.getElementById('pwReqs');
+        const reqLen  = reqs?.querySelector('[data-req="length"]');
+        const reqCase = reqs?.querySelector('[data-req="case"]');
+        const reqDig  = reqs?.querySelector('[data-req="digit"]');
+        const reqMat  = reqs?.querySelector('[data-req="match"]');
+        const submit  = document.getElementById('resetSubmit');
 
         function scoreOf(p) {
             if (!p) return 0;
             let s = 0;
-            if (p.length >= 6) s++;
-            if (p.length >= 10) s++;
+            if (p.length >= 8) s++;
+            if (p.length >= 12) s++;
             if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
             if (/\d/.test(p) && /[a-zA-Z]/.test(p)) s++;
             if (/[^A-Za-z0-9]/.test(p)) s++;
@@ -223,8 +225,9 @@
                 meter.dataset.score = String(s);
                 if (label) label.textContent = SCORE_LABELS[s];
             }
-            setReq(reqLen, p.length >= 6);
-            setReq(reqMix, /[a-zA-Z]/.test(p) && /\d/.test(p));
+            setReq(reqLen,  p.length >= 8);
+            setReq(reqCase, /[a-z]/.test(p) && /[A-Z]/.test(p));
+            setReq(reqDig,  /\d/.test(p));
         }
 
         function updateMatch() {

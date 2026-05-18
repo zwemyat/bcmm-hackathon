@@ -146,7 +146,7 @@
                                 <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
                                 <input type="password" name="password" id="newPassword"
                                        class="form-control border-start-0 ps-0 @error('password') is-invalid @enderror"
-                                       placeholder="At least 6 characters"
+                                       placeholder="Min 8 chars · mixed case · a number"
                                        autocomplete="new-password">
                                 <button type="button" class="btn btn-outline-secondary" data-toggle-pw="newPassword" tabindex="-1" title="Show / hide password"><i class="bi bi-eye"></i></button>
                                 @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror

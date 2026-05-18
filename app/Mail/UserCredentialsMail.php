@@ -9,13 +9,19 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * Welcome email sent when an admin creates a new user. Carries a single-use
+ * password-broker token URL — NOT a cleartext password. The user clicks the
+ * link to set their own password through the standard reset UI.
+ */
 class UserCredentialsMail extends Mailable
 {
     use Queueable, SerializesModels;
 
     public function __construct(
         public User $user,
-        public string $plainPassword,
+        public string $setupUrl,
+        public int $expireMinutes,
         public string $loginUrl,
     ) {
     }
@@ -24,7 +30,7 @@ class UserCredentialsMail extends Mailable
     {
         $app = config('app.name', 'ITAMS');
         return new Envelope(
-            subject: "[{$app}] Your account has been created",
+            subject: "[{$app}] Welcome — set your password to get started",
         );
     }
 
@@ -33,10 +39,11 @@ class UserCredentialsMail extends Mailable
         return new Content(
             view: 'emails.user-credentials',
             with: [
-                'user' => $this->user,
-                'plainPassword' => $this->plainPassword,
-                'loginUrl' => $this->loginUrl,
-                'appName' => config('app.name', 'ITAMS'),
+                'user'          => $this->user,
+                'setupUrl'      => $this->setupUrl,
+                'expireMinutes' => $this->expireMinutes,
+                'loginUrl'      => $this->loginUrl,
+                'appName'       => config('app.name', 'ITAMS'),
             ],
         );
     }

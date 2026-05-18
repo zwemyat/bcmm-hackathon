@@ -116,15 +116,18 @@ class ForgotPasswordController extends Controller
         $data = $request->validate([
             'token'    => ['required'],
             'email'    => ['required', 'email'],
-            'password' => ['required', 'confirmed', PasswordRule::min(6)],
+            'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()],
         ]);
 
-        // Hard guard: even with a valid token, only admins are allowed to use
-        // this endpoint. The error message intentionally mirrors the "bad
-        // token" branch below so a non-admin attacker holding a stolen token
-        // can't distinguish "wrong token" from "wrong account type".
+        // H1: this endpoint is used for two paths — admin self-reset (token
+        // came from /forgot-password) AND first-time setup for any newly-
+        // created user (token came from UserController::store). Both need to
+        // pass through. We don't gate by role here because the password broker
+        // already verifies the token belongs to the user, and tokens can only
+        // be minted by admin-authenticated code paths (the trigger endpoint
+        // is admin-only; user creation is admin-only).
         $user = User::query()->where('email', $data['email'])->first();
-        if (! $user || ! $user->isAdmin()) {
+        if (! $user) {
             return back()
                 ->withInput($request->only('email'))
                 ->withErrors(['email' => self::GENERIC_RESET_ERROR]);
@@ -141,13 +144,16 @@ class ForgotPasswordController extends Controller
         );
 
         if ($status === Password::PASSWORD_RESET) {
+            $isFirstTime = ! $user->isAdmin();
             ActivityLogger::log(
-                action: 'password_reset',
-                description: "Admin {$user->email} reset their password via email link",
+                action: $isFirstTime ? 'password_set' : 'password_reset',
+                description: $isFirstTime
+                    ? "User {$user->email} set their initial password via setup link"
+                    : "Admin {$user->email} reset their password via email link",
                 subject: $user,
             );
 
-            return redirect()->route('login')->with('success', 'Password reset. You can sign in with your new password.');
+            return redirect()->route('login')->with('success', 'Password set. You can sign in with your new password.');
         }
 
         // Same generic error for invalid token / expired token / mismatched

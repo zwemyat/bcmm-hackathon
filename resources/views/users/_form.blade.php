@@ -55,22 +55,43 @@
                             @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label">Password @if($editing)<span class="text-muted small">(leave blank to keep)</span>@else <span class="text-danger">*</span>@endif</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
-                            <input type="password" name="password" id="userPassword" class="form-control border-start-0 ps-0 @error('password') is-invalid @enderror" placeholder="{{ $editing ? '••••••••' : 'Minimum 6 characters' }}" {{ $editing ? '' : 'required' }}>
-                            <button type="button" class="btn btn-outline-secondary" id="togglePw" tabindex="-1" title="Show / hide password"><i class="bi bi-eye" id="togglePwIcon"></i></button>
-                            @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    @if($editing)
+                        {{-- Edit-only: admin may set or replace a password manually. On create, the user
+                             receives a single-use setup link by email and never gets a typed password. --}}
+                        <div class="col-md-8">
+                            <label class="form-label">Password <span class="text-muted small">(leave blank to keep)</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                                <input type="password" name="password" id="userPassword" class="form-control border-start-0 ps-0 @error('password') is-invalid @enderror" placeholder="••••••••">
+                                <button type="button" class="btn btn-outline-secondary" id="togglePw" tabindex="-1" title="Show / hide password"><i class="bi bi-eye" id="togglePwIcon"></i></button>
+                                @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Role <span class="text-danger">*</span></label>
-                        <select name="role" id="roleSelect" class="form-select">
-                            <option value="user"  @selected($currentRole === 'user')>User</option>
-                            <option value="admin" @selected($currentRole === 'admin')>Admin</option>
-                        </select>
-                    </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Role <span class="text-danger">*</span></label>
+                            <select name="role" id="roleSelect" class="form-select">
+                                <option value="user"  @selected($currentRole === 'user')>User</option>
+                                <option value="admin" @selected($currentRole === 'admin')>Admin</option>
+                            </select>
+                        </div>
+                    @else
+                        <div class="col-md-4">
+                            <label class="form-label">Role <span class="text-danger">*</span></label>
+                            <select name="role" id="roleSelect" class="form-select">
+                                <option value="user"  @selected($currentRole === 'user')>User</option>
+                                <option value="admin" @selected($currentRole === 'admin')>Admin</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="alert alert-info d-flex gap-2 mb-0" style="font-size: .82rem;">
+                                <i class="bi bi-envelope-paper-heart-fill"></i>
+                                <div>
+                                    <strong>No password needed.</strong>
+                                    A one-time setup link will be emailed to this address so the user can choose their own password.
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

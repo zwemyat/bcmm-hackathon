@@ -32,7 +32,7 @@ class ProfileController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'current_password' => ['nullable', 'required_with:password', 'current_password'],
-            'password' => ['nullable', 'confirmed', PasswordRule::min(6)],
+            'password' => ['nullable', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()],
         ], [
             'current_password.current_password' => 'Your current password is incorrect.',
             'current_password.required_with'   => 'Enter your current password to set a new one.',
