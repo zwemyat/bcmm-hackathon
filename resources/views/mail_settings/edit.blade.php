@@ -132,29 +132,13 @@
                 </div>
             </div>
 
-            {{-- Reminders --}}
-            <div class="card mb-3">
-                <div class="card-header bg-transparent d-flex align-items-center gap-2">
-                    <i class="bi bi-bell text-primary"></i><strong>Renewal Reminders</strong>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Send reminder days before expiry <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input type="number" name="reminder_days_before" value="{{ old('reminder_days_before', $settings->reminder_days_before ?? 30) }}" class="form-control @error('reminder_days_before') is-invalid @enderror" min="1" max="365" required>
-                                <span class="input-group-text">days</span>
-                            </div>
-                            <small class="text-muted">Subscriptions within this window trigger reminders.</small>
-                            @error('reminder_days_before')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Reminder Recipients</label>
-                            <textarea name="reminder_recipients" rows="3" class="form-control @error('reminder_recipients') is-invalid @enderror" placeholder="One or more emails — separate with comma, semicolon, or newline.&#10;e.g. ops@company.com, admin@company.com">{{ old('reminder_recipients', $settings->reminder_recipients) }}</textarea>
-                            <small class="text-muted">Leave empty to fall back to all admin users' emails.</small>
-                            @error('reminder_recipients')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
+            {{-- Reminder window + recipients now live per-module in Notification Settings.
+                 This page is SMTP transport only — see audit M3. --}}
+            <div class="alert alert-info d-flex align-items-start gap-2 mb-3" style="font-size: .85rem;">
+                <i class="bi bi-info-circle-fill mt-1"></i>
+                <div>
+                    Reminder windows and recipients are configured <strong>per module</strong> in
+                    <a href="{{ route('notification-settings.edit') }}">Notification Settings</a> — this page only handles SMTP transport.
                 </div>
             </div>
 
@@ -188,24 +172,11 @@
                     <span class="text-muted">From address</span>
                     <code class="text-truncate ms-2" style="max-width: 200px;" title="{{ config('mail.from.address') }}">{{ config('mail.from.address') }}</code>
                 </div>
-                @if($settings->reminder_days_before)
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Reminder window</span>
-                    <span>{{ $settings->reminder_days_before }} day{{ $settings->reminder_days_before === 1 ? '' : 's' }} before</span>
-                </div>
-                @endif
-                @php
-                    $recipientCount = $settings->reminder_recipients
-                        ? count(array_filter(preg_split('/[\s,;]+/', $settings->reminder_recipients)))
-                        : 0;
-                @endphp
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted">Recipients</span>
-                    @if($recipientCount)
-                        <span>{{ $recipientCount }} address{{ $recipientCount === 1 ? '' : 'es' }}</span>
-                    @else
-                        <span class="text-muted">Admin users (fallback)</span>
-                    @endif
+                    <span class="text-muted">Reminders</span>
+                    <a href="{{ route('notification-settings.edit') }}" class="text-decoration-none">
+                        Per-module <i class="bi bi-arrow-up-right" style="font-size: .7rem;"></i>
+                    </a>
                 </div>
             </div>
         </div>

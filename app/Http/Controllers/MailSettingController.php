@@ -17,33 +17,20 @@ class MailSettingController extends Controller
 
     public function update(Request $request)
     {
+        // Reminder window + recipients moved to per-module NotificationSetting
+        // (see audit M3). This form only owns SMTP transport now.
         $data = $request->validate([
-            'mailer' => 'required|string|in:smtp,log,sendmail',
-            'host' => 'nullable|string|max:255',
-            'port' => 'nullable|integer|min:1|max:65535',
-            'encryption' => 'nullable|in:tls,ssl',
-            'auth_mode' => 'nullable|in:plain,login,cram-md5',
-            'username' => 'nullable|string|max:255',
-            'password' => 'nullable|string|max:255',
+            'mailer'       => 'required|string|in:smtp,log,sendmail',
+            'host'         => 'nullable|string|max:255',
+            'port'         => 'nullable|integer|min:1|max:65535',
+            'encryption'   => 'nullable|in:tls,ssl',
+            'auth_mode'    => 'nullable|in:plain,login,cram-md5',
+            'username'     => 'nullable|string|max:255',
+            'password'     => 'nullable|string|max:255',
             'from_address' => 'nullable|email|max:255',
-            'from_name' => 'nullable|string|max:255',
-            'reminder_recipients' => 'nullable|string|max:2000',
-            'reminder_days_before' => 'required|integer|min:1|max:365',
-            'enabled' => 'sometimes|boolean',
+            'from_name'    => 'nullable|string|max:255',
+            'enabled'      => 'sometimes|boolean',
         ]);
-
-        if (! empty($data['reminder_recipients'])) {
-            $emails = preg_split('/[\s,;]+/', $data['reminder_recipients']);
-            foreach ($emails as $email) {
-                $email = trim($email);
-                if ($email === '') continue;
-                if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    return back()
-                        ->withInput()
-                        ->withErrors(['reminder_recipients' => "Invalid email address: {$email}"]);
-                }
-            }
-        }
 
         $settings = MailSetting::current();
 

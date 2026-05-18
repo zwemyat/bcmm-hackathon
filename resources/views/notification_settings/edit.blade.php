@@ -4,18 +4,13 @@
 @php
     $modules = \App\Models\NotificationSetting::MODULES;
     $moduleIcons = [
-        'pc_assets'          => 'bi-pc-display',
-        'devices'            => 'bi-hdd-network',
         'subscriptions'      => 'bi-calendar-event',
         'licenses_contracts' => 'bi-file-earmark-text',
     ];
     $moduleHints = [
-        'pc_assets'          => 'Warranty expiry reminders for PC assets.',
-        'devices'            => 'Warranty expiry reminders for devices.',
         'subscriptions'      => 'Renewal reminders based on subscription expire date.',
         'licenses_contracts' => 'Renewal reminders based on license / contract expire date.',
     ];
-    $supported = ['subscriptions', 'licenses_contracts'];
     $activeTab = session('active_tab', 'subscriptions');
     if (! array_key_exists($activeTab, $modules)) $activeTab = 'subscriptions';
 @endphp
@@ -37,7 +32,6 @@
                 @php
                     $setting = $settings[$key] ?? null;
                     $isActive = $key === $activeTab;
-                    $isSupported = in_array($key, $supported);
                 @endphp
                 <li class="nav-item" role="presentation">
                     <button class="nav-link {{ $isActive ? 'active' : '' }}" id="tab-{{ $key }}"
@@ -45,10 +39,8 @@
                             role="tab" aria-controls="pane-{{ $key }}" aria-selected="{{ $isActive ? 'true' : 'false' }}">
                         <i class="bi {{ $moduleIcons[$key] }}"></i>
                         <span class="ms-1">{{ $label }}</span>
-                        @if($isSupported && $setting && $setting->enabled)
+                        @if($setting && $setting->enabled)
                             <span class="badge bg-success-subtle text-success-emphasis ms-1" title="Notifications enabled">on</span>
-                        @elseif(! $isSupported)
-                            <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1" title="Not yet supported">soon</span>
                         @endif
                     </button>
                 </li>
@@ -60,22 +52,10 @@
                 @php
                     $setting = $settings[$key] ?? null;
                     $isActive = $key === $activeTab;
-                    $isSupported = in_array($key, $supported);
                     $errorKey = "recipients_{$key}";
                 @endphp
                 <div class="tab-pane fade {{ $isActive ? 'show active' : '' }}" id="pane-{{ $key }}" role="tabpanel" aria-labelledby="tab-{{ $key }}">
 
-                    @if(! $isSupported)
-                        {{-- Coming-soon placeholder for PC and Device until they have a real warranty-end date column --}}
-                        <div class="text-center py-5">
-                            <div class="coming-soon-icon mx-auto mb-3"><i class="bi {{ $moduleIcons[$key] }}"></i></div>
-                            <h5 class="mb-2">{{ $label }} reminders &mdash; coming soon</h5>
-                            <p class="text-muted mb-0">
-                                {{ $label }} currently uses a free-text <code>warranty</code> field, which the reminder engine can't parse for a specific expiry date.<br>
-                                Once a <code>warranty_end_date</code> column is added to the schema, this tab will let you configure reminders just like Subscriptions.
-                            </p>
-                        </div>
-                    @else
                         <div class="d-flex align-items-center gap-3 mb-3">
                             <span class="module-tab-icon"><i class="bi {{ $moduleIcons[$key] }}"></i></span>
                             <div>
@@ -160,7 +140,6 @@
                                 <button class="btn btn-primary"><i class="bi bi-check2"></i> Save {{ $label }} settings</button>
                             </div>
                         </form>
-                    @endif
                 </div>
             @endforeach
         </div>
@@ -212,17 +191,6 @@
         align-items: center;
         justify-content: center;
         font-size: 1.2rem;
-    }
-
-    .coming-soon-icon {
-        width: 72px; height: 72px;
-        border-radius: .85rem;
-        background: rgba(108, 117, 125, 0.1);
-        color: #6c757d;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 2rem;
     }
 
     /* Day-mark on/off cards: one per preset (30/20/10 days). */
@@ -289,7 +257,6 @@
         border-color: rgba(255, 255, 255, 0.06) rgba(255, 255, 255, 0.06) #1a1f29;
     }
     [data-bs-theme="dark"] .module-tab-icon { background: rgba(147, 197, 253, 0.15); color: #93c5fd; }
-    [data-bs-theme="dark"] .coming-soon-icon { background: rgba(255, 255, 255, 0.05); color: #cfd8dc; }
 </style>
 
 <script>

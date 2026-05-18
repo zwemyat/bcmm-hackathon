@@ -6,9 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class NotificationSetting extends Model
 {
+    /**
+     * Modules the reminder engine actually scans. PC Master and Devices were
+     * stubbed here for a planned warranty-expiry workflow but never wired up
+     * — see audit M2. They were removed to stop the settings UI from offering
+     * configuration toggles that did nothing. Re-add (and extend
+     * ExpiryNotificationCounter + CheckExpirations) when those modules grow a
+     * structured warranty_end_date column.
+     */
     public const MODULES = [
-        'pc_assets'          => 'PC Master',
-        'devices'            => 'Device Master',
         'subscriptions'      => 'Subscriptions',
         'licenses_contracts' => 'License & Contract',
     ];
